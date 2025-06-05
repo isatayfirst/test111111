@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Вход / Регистрация</title>
+    <link rel="stylesheet" href="../static/styles.css">
+    <!-- внутри <head> ↑ уже есть подключение стилей -->
+<link rel="preconnect" href="https://fonts.gstatic.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+</head>
+<body>
+<div class="card">
+
+  <h2>🔐 Добро пожаловать</h2>
+
+  <div class="tabs">
+      <input type="radio" id="loginTab" name="mode" value="login" checked>
+      <label for="loginTab">Вход</label>
+
+      <input type="radio" id="registerTab" name="mode" value="register">
+      <label for="registerTab">Регистрация</label>
+  </div>
+
+  <input type="text" id="username" placeholder="Логин">
+  <input type="password" id="password" placeholder="Пароль">
+
+  <button onclick="submitForm()">Продолжить</button>
+  <div id="status"></div>
+
+  <div class="inline-gap mt-12">
+      <input type="checkbox" id="darkToggle" onclick="toggleDark()">
+      <label for="darkToggle" style="font-size:13px;color:var(--text-light)">Тёмная тема</label>
+  </div>
+</div>
+
+    <script>
+        async function submitForm() {
+            const username = document.getElementById("username").value;
+            const password = document.getElementById("password").value;
+            const mode = document.querySelector('input[name="mode"]:checked').value;
+
+            const url = mode === "register" ? "/auth/register" : "/auth/login";
+            const body = mode === "register"
+                ? JSON.stringify({ username, password })
+                : new URLSearchParams({ username, password });
+
+            const headers = mode === "register"
+                ? { "Content-Type": "application/json" }
+                : { "Content-Type": "application/x-www-form-urlencoded" };
+
+            const response = await fetch(url, {
+                method: "POST",
+                body,
+                headers
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                const token = mode === "register" ? await loginAfterRegister(username, password) : result.access_token;
+                if (token) {
+                    localStorage.setItem("token", token);
+                    window.location.href = "/chat";
+                }
+            } else {
+                document.getElementById("status").innerText = result.detail || "Ошибка";
+            }
+        }
+
+        async function loginAfterRegister(username, password) {
+            const loginRes = await fetch("/auth/login", {
+                method: "POST",
+                body: new URLSearchParams({ username, password }),
+                headers: { "Content-Type": "application/x-www-form-urlencoded" }
+            });
+
+            const result = await loginRes.json();
+            return loginRes.ok ? result.access_token : null;
+        }
+    </script>
+</body>
+</html>
