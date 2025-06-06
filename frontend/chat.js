@@ -2,10 +2,6 @@
 "use strict";
 
 
-let currentUID = null;          // активный собеседник
-let currentUserID = null;
-let authToken = localStorage.getItem("access_token");
-let socket;
 
 async function getCurrentUser() {
     const res = await fetch("http://127.0.0.1:8000/me", {
@@ -22,10 +18,6 @@ async function getCurrentUser() {
     }
 }
 
-getCurrentUser().then(() => {
-  loadDialogs();
-  setupWebSocket();
-});
 
 /* ------------------- DOM-ссылки ------------------------------------ */
 const chatBox = document.getElementById('chat');
@@ -266,39 +258,10 @@ function refreshCard(uid, text, timestamp) {
   card.querySelector(".msg").textContent = text;
   card.querySelector(".dialog-date").textContent = formatTime(timestamp);
 
-  // переместить в начало
-  const parent = card.parentElement;
-  parent.prepend(card);
-}
-
-async function updateOnline() {
-  try {
-    const res = await fetch('http://127.0.0.1:8000/online');
-    if (!res.ok) return;
-    const ids = await res.json();
-    document.querySelectorAll('.dialog-item').forEach(c => {
-      c.classList.toggle('online', ids.includes(parseInt(c.dataset.user)));
-    });
-  } catch {}
-}
 
 /* ------------------- события ------------------------------------- */
 document.querySelectorAll('.dialog-item').forEach(card =>
     card.addEventListener('click', () => openChat(card)));
-sendBtn.onclick = sendMessage;
-inputBox.addEventListener('keyup', e => e.key === 'Enter' && sendMessage());
-chatBox.addEventListener('dblclick', async e => {
-  const wrap = e.target.closest('.msg-wrap.out');
-  if (!wrap) return;
-  const id = wrap.dataset.id;
-  if (!id) return;
-  if (!confirm('Удалить сообщение?')) return;
-  await fetch(`http://127.0.0.1:8000/messages/${id}`, {
-    method: 'DELETE',
-    headers: { 'Authorization': 'Bearer ' + authToken }
-  });
-  wrap.remove();
-});
 
 async function loadDialogs() {
   const res = await fetch("http://127.0.0.1:8000/dialogs", {
