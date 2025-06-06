@@ -103,6 +103,10 @@
             object-fit: cover;
         }
 
+        .dialog-item.online .avatar {
+            border: 2px solid #2ecc71;
+        }
+
         .dialog-body {
             flex: 1; /* растягивается, чтобы дата ушла вправо */
             overflow: hidden;
@@ -415,7 +419,7 @@
         </div>
         <div id="owner">
             <a id="owner-link" href="profile.html" title="Профиль">
-                <img id="owner-avatar" src="D:/web/frontend/img/default.png" alt="owner">
+                <img id="owner-avatar" src="img/default.png" alt="owner">
                 <span id="owner-name">Исатай</span>
             </a>
             <button id="owner-logout">Выйти</button>
@@ -425,17 +429,6 @@
     <aside id="sidebar">
         <div id="sidebar-header">Сообщения</div>  <!-- 1/10 -->
         <div id="dialogs">
-            <!-- Пример трёх карточек-диалогов -->
-            <div class="dialog-item" data-user="selti">
-                <img class="avatar"
-                     src="https://thumbs.onlyfans.com/public/files/thumbs/c144/a/aj/ajh/ajhzga7hddglxvoxian4ztvesy3opfck1672738990/128127156/avatar.jpg"
-                     alt="Selti">
-                <div class="dialog-body">
-                    <div class="name">Selti</div>
-                    <div class="preview">№ 46 “HOMEMADE PAJAMAS”…</div>
-                </div>
-                <div class="date">2 июня</div>
-            </div>
         </div>                  <!-- 9/10, список чатов -->
     </aside>
 
@@ -476,7 +469,7 @@
         if (response.ok) {
             const user = await response.json();
             document.getElementById("owner-name").textContent = user.login;
-            document.getElementById("owner-avatar").src = user.avatar || "default.png";
+            document.getElementById("owner-avatar").src = user.avatar || "img/default.png";
         } else {
             localStorage.clear();
             window.location.href = "register.html";

@@ -34,6 +34,7 @@ class MessageCreate(BaseModel):
     text: str
 
 class MessageOut(BaseModel):
+    id: int
     from_user: int
     to: int
     text: str
