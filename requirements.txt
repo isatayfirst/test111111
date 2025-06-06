@@ -1,9 +1,0 @@
-fastapi
-uvicorn[standard]
-sqlalchemy
-sqlite3
-python-multipart
-passlib[bcrypt]
-python-jose[cryptography]
-jinja2
-websockets
