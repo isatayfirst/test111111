@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Sign In / Sign Up</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      font-family: 'Segoe UI', sans-serif;
+      background: url('D:/web/frontend/img/bk.jpg') no-repeat center center / cover;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .form {
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 1rem;
+      padding: 2rem;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      display: none;
+    }
+
+    .form.active {
+      display: block;
+    }
+
+    .form-title {
+      font-size: 1.5rem;
+      font-weight: bold;
+      text-align: center;
+      color: #156d07;
+      margin-bottom: 1.5rem;
+    }
+
+    .input-container {
+      margin-bottom: 1rem;
+      position: relative;
+    }
+
+    .input-container input {
+      width: 100%;
+      padding: 0.9rem 1.1rem;
+      padding-right: 2.5rem;
+      font-size: 1rem;
+      border: none;
+      border-radius: 0.75rem;
+      background-color: rgba(255, 255, 255, 0.85);
+      outline: none;
+    }
+
+    .input-container span {
+      position: absolute;
+      top: 50%;
+      right: 1rem;
+      transform: translateY(-50%);
+      font-size: 1.1rem;
+      pointer-events: none;
+      opacity: 0.6;
+    }
+
+    .submit {
+      width: 100%;
+      padding: 0.9rem;
+      font-size: 1rem;
+      font-weight: 600;
+      background: #156d07;
+      color: white;
+      border: none;
+      border-radius: 0.75rem;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    .submit:hover {
+      background: #3730a3;
+    }
+
+    .signup-link {
+      text-align: center;
+      margin-top: 1rem;
+      font-size: 0.9rem;
+      color: #f1f1f1;
+    }
+
+    .signup-link a {
+      color: #d1d5db;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- Sign In -->
+  <form id="signin-form" class="form active">
+    <p class="form-title">Sign in to your account</p>
+    <div class="input-container">
+      <input id="signin-login" placeholder="Enter login" type="text">
+      <span>👤</span>
+    </div>
+    <div class="input-container">
+      <input id="signin-password" placeholder="Enter password" type="password">
+      <span>🔒</span>
+    </div>
+    <button class="submit" type="submit">SIGN IN</button>
+    <p class="signup-link">
+      No account? <a onclick="switchForm('signup')">Sign up</a>
+    </p>
+  </form>
+
+  <!-- Sign Up -->
+  <form id="signup-form" class="form">
+    <p class="form-title">Create a new account</p>
+    <div class="input-container">
+      <input id="signup-name" placeholder="Enter your name" type="text">
+      <span>👤</span>
+    </div>
+    <div class="input-container">
+      <input id="signup-login" placeholder="Enter login" type="text">
+      <span>📧</span>
+    </div>
+    <div class="input-container">
+      <input id="signup-password" placeholder="Create password" type="password">
+      <span>🔒</span>
+    </div>
+    <button class="submit" type="submit">SIGN UP</button>
+    <p class="signup-link">
+      Already have an account? <a onclick="switchForm('signin')">Sign in</a>
+    </p>
+  </form>
+
+  <script>
+function switchForm(target) {
+  document.getElementById("signin-form").classList.remove("active");
+  document.getElementById("signup-form").classList.remove("active");
+  document.getElementById(target + "-form").classList.add("active");
+}
+
+// ✅ Регистрация
+document.getElementById("signin-form").addEventListener("submit", async function (e) {
+  e.preventDefault();
+
+  const login = document.getElementById("signin-login").value.trim();
+  const password = document.getElementById("signin-password").value.trim();
+
+  if (!login || !password) {
+    alert("Введите логин и пароль!");
+    return;
+  }
+
+  const formData = new URLSearchParams();
+  formData.append("username", login);
+  formData.append("password", password);
+
+  const response = await fetch("http://127.0.0.1:8000/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: formData
+  });
+
+  if (response.ok) {
+    const data = await response.json();
+    localStorage.setItem("access_token", data.access_token);
+    window.location.href = "index.html";
+  } else {
+    const error = await response.json();
+    alert("Ошибка входа: " + error.detail);
+  }
+});
+// ✅ Обработчик регистрации
+document.getElementById("signup-form").addEventListener("submit", async function (e) {
+  e.preventDefault();
+
+  const name = document.getElementById("signup-name").value.trim();
+  const login = document.getElementById("signup-login").value.trim();
+  const password = document.getElementById("signup-password").value.trim();
+
+  if (!name || !login || !password) {
+    alert("Пожалуйста, заполните все поля!");
+    return;
+  }
+
+  const response = await fetch("http://127.0.0.1:8000/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, login, password })
+  });
+
+  if (response.ok) {
+    alert("Регистрация прошла успешно! Теперь войдите.");
+    switchForm("signin");
+  } else {
+    const error = await response.json();
+    alert("Ошибка регистрации: " + error.detail);
+  }
+});
+
+</script>
+</body>
+</html>
