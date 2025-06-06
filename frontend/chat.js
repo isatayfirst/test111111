@@ -2,9 +2,6 @@
 "use strict";
 
 
-let currentUID = null;          // активный собеседник
-let currentUserID = null;
-let authToken = localStorage.getItem("access_token");
 
 async function getCurrentUser() {
     const res = await fetch("http://127.0.0.1:8000/me", {
@@ -21,7 +18,6 @@ async function getCurrentUser() {
     }
 }
 
-getCurrentUser().then(loadDialogs);
 
 /* ------------------- DOM-ссылки ------------------------------------ */
 const chatBox = document.getElementById('chat');
@@ -37,6 +33,11 @@ const resultBox = document.getElementById('search-results');
 const fmtTime = d => d.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'});
 const fmtDate = d => d.toLocaleDateString('ru-RU', {day: 'numeric', month: 'short'});
 
+function formatTime(ts) {
+  if (!ts) return '';
+  return fmtDate(new Date(ts)) + ' ' + fmtTime(new Date(ts));
+}
+
 /* Обновляем превью и время в карточке */
 
 /* ссылки */
@@ -49,6 +50,43 @@ logoutBtn.addEventListener('click', () => {
     localStorage.clear();
     window.location.href = "register.html";
 });
+
+function setupWebSocket() {
+  socket = new WebSocket(`ws://127.0.0.1:8000/ws?token=${authToken}`);
+  socket.onmessage = e => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'message') {
+        handleIncoming(msg.data);
+      } else if (msg.type === 'delete') {
+        const bubble = document.querySelector(`.msg-wrap[data-id="${msg.data.id}"]`);
+        if (bubble) bubble.remove();
+      }
+    } catch {}
+  };
+  socket.onclose = () => setTimeout(setupWebSocket, 2000);
+  setInterval(() => {
+    if (socket.readyState === WebSocket.OPEN) socket.send("ping");
+  }, 30000);
+}
+
+function handleIncoming(data) {
+  const from = data.from_user === currentUserID ? 'me' : 'them';
+  const otherId = from === 'me' ? data.to : data.from_user;
+
+  if (currentUID && (currentUID == otherId)) {
+    chatBox.appendChild(buildMessage({
+      id: data.id,
+      from,
+      text: data.text,
+      ts: new Date(data.timestamp).getTime(),
+      avatarSrc: from === 'them' ?
+        document.querySelector(`.dialog-item[data-user="${otherId}"] .avatar`)?.src : null
+    }));
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+  refreshCard(otherId, data.text, data.timestamp);
+}
 
 function buildSearchItem(card) {
     const uid = card.dataset.user;
@@ -90,9 +128,10 @@ resultBox.addEventListener('click', e => {
 });
 
 /* Строим один пузырь */
-function buildMessage({from, text, ts, avatarSrc}) {
+function buildMessage({id, from, text, ts, avatarSrc}) {
     const wrap = document.createElement('div');
     wrap.className = `msg-wrap ${from === 'me' ? 'out' : 'in'}`;
+    if (id) wrap.dataset.id = id;
 
     if (from !== 'me' && avatarSrc) {
         const av = document.createElement('img');
@@ -130,6 +169,7 @@ async function loadMessages(uid, avatarSrc) {
         data.forEach(msg => {
             const from = (msg.from_user === currentUserID) ? 'me' : 'them';
             chatBox.appendChild(buildMessage({
+                id: msg.id,
                 from,
                 text: msg.text,
                 ts: new Date(msg.timestamp).getTime(),
@@ -199,6 +239,7 @@ async function sendMessage() {
         if (!card) return;
 
         chatBox.appendChild(buildMessage({
+            id: msg.id,
             from: 'me',
             text: msg.text,
             ts: new Date(msg.timestamp).getTime()
@@ -217,16 +258,10 @@ function refreshCard(uid, text, timestamp) {
   card.querySelector(".msg").textContent = text;
   card.querySelector(".dialog-date").textContent = formatTime(timestamp);
 
-  // переместить в начало
-  const parent = card.parentElement;
-  parent.prepend(card);
-}
 
 /* ------------------- события ------------------------------------- */
 document.querySelectorAll('.dialog-item').forEach(card =>
     card.addEventListener('click', () => openChat(card)));
-sendBtn.onclick = sendMessage;
-inputBox.addEventListener('keyup', e => e.key === 'Enter' && sendMessage());
 
 async function loadDialogs() {
   const res = await fetch("http://127.0.0.1:8000/dialogs", {
@@ -259,3 +294,6 @@ async function loadDialogs() {
 function truncate(text, max) {
   return text.length > max ? text.slice(0, max) + "…" : text;
 }
+
+setInterval(updateOnline, 10000);
+updateOnline();
