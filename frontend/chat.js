@@ -5,6 +5,7 @@
 let currentUID = null;          // активный собеседник
 let currentUserID = null;
 let authToken = localStorage.getItem("access_token");
+let socket;
 
 async function getCurrentUser() {
     const res = await fetch("http://127.0.0.1:8000/me", {
@@ -14,52 +15,21 @@ async function getCurrentUser() {
         const user = await res.json();
         currentUserID = user.id;
         document.getElementById("owner-name").textContent = user.login;
-        document.getElementById("owner-avatar").src = user.avatar || "default.png";
+        document.getElementById("owner-avatar").src = user.avatar || "img/default.png";
     } else {
         localStorage.clear();
         window.location.href = "register.html";
     }
 }
 
-getCurrentUser();
-
-async function loadUsers() {
-  const res = await fetch("http://127.0.0.1:8000/users", {
-    headers: { "Authorization": "Bearer " + authToken }
-  });
-
-  if (!res.ok) return;
-
-  const users = await res.json();
-  const list = document.querySelector("#dialogs");
-
-  users.forEach(user => {
-    if (user.login === "selti") return;  // исключаем AI, если вдруг попадёт в БД
-
-    const item = document.createElement("div");
-    item.classList.add("dialog-item");
-    item.dataset.user = user.id;
-
-    item.innerHTML = `
-      <img class="avatar" src="${user.avatar || 'D:/web/frontend/img/default.png'}" />
-      <div class="dialog-text">
-        <div class="name">${user.login}</div>
-        <div class="msg">Новое сообщение</div>
-      </div>
-      <div class="dialog-date">...</div>
-    `;
-
-    item.addEventListener("click", () => openChat(item));
-    list.appendChild(item);
-  });
-}
-
-loadUsers();
+getCurrentUser().then(() => {
+  loadDialogs();
+  setupWebSocket();
+});
 
 /* ------------------- DOM-ссылки ------------------------------------ */
 const chatBox = document.getElementById('chat');
 const headerLbl = document.getElementById('user-info');
-const dialogs = document.querySelectorAll('.dialog-item');
 const inputBox = document.querySelector('#composer input');
 const sendBtn = document.querySelector('#composer button');
 const avatarHdr = document.getElementById('header-avatar');
@@ -71,25 +41,12 @@ const resultBox = document.getElementById('search-results');
 const fmtTime = d => d.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'});
 const fmtDate = d => d.toLocaleDateString('ru-RU', {day: 'numeric', month: 'short'});
 
-/* Обновляем превью и время в карточке */
-function refreshCard(uid, lastText, ts) {
-    const card = document.querySelector(`.dialog-item[data-user="${uid}"]`);
-    if (!card) return;
-
-    card.querySelector('.preview').textContent =
-        lastText.length > 40 ? lastText.slice(0, 37) + '…' : lastText;
-
-    const dateEl = card.querySelector('.date');
-    const now = new Date(ts);
-    dateEl.textContent = (new Date().toDateString() === now.toDateString())
-        ? fmtTime(now) : fmtDate(now);
-
-    /* переносим карточку вверх –- самое свежее сообщение выше */
-    const parent = card.parentElement;
-    if (parent) {
-        parent.prepend(card);
-    }
+function formatTime(ts) {
+  if (!ts) return '';
+  return fmtDate(new Date(ts)) + ' ' + fmtTime(new Date(ts));
 }
+
+/* Обновляем превью и время в карточке */
 
 /* ссылки */
 const logoutBtn = document.getElementById('owner-logout');
@@ -101,6 +58,43 @@ logoutBtn.addEventListener('click', () => {
     localStorage.clear();
     window.location.href = "register.html";
 });
+
+function setupWebSocket() {
+  socket = new WebSocket(`ws://127.0.0.1:8000/ws?token=${authToken}`);
+  socket.onmessage = e => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'message') {
+        handleIncoming(msg.data);
+      } else if (msg.type === 'delete') {
+        const bubble = document.querySelector(`.msg-wrap[data-id="${msg.data.id}"]`);
+        if (bubble) bubble.remove();
+      }
+    } catch {}
+  };
+  socket.onclose = () => setTimeout(setupWebSocket, 2000);
+  setInterval(() => {
+    if (socket.readyState === WebSocket.OPEN) socket.send("ping");
+  }, 30000);
+}
+
+function handleIncoming(data) {
+  const from = data.from_user === currentUserID ? 'me' : 'them';
+  const otherId = from === 'me' ? data.to : data.from_user;
+
+  if (currentUID && (currentUID == otherId)) {
+    chatBox.appendChild(buildMessage({
+      id: data.id,
+      from,
+      text: data.text,
+      ts: new Date(data.timestamp).getTime(),
+      avatarSrc: from === 'them' ?
+        document.querySelector(`.dialog-item[data-user="${otherId}"] .avatar`)?.src : null
+    }));
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+  refreshCard(otherId, data.text, data.timestamp);
+}
 
 function buildSearchItem(card) {
     const uid = card.dataset.user;
@@ -117,7 +111,7 @@ function filterUsers(q) {
     resultBox.innerHTML = '';
     if (!q?.trim()) return;
 
-    const found = Array.from(dialogs).filter(card =>
+    const found = Array.from(document.querySelectorAll('.dialog-item')).filter(card =>
         card.querySelector('.name')?.textContent.toLowerCase().includes(q.toLowerCase())
     );
 
@@ -142,9 +136,10 @@ resultBox.addEventListener('click', e => {
 });
 
 /* Строим один пузырь */
-function buildMessage({from, text, ts, avatarSrc}) {
+function buildMessage({id, from, text, ts, avatarSrc}) {
     const wrap = document.createElement('div');
     wrap.className = `msg-wrap ${from === 'me' ? 'out' : 'in'}`;
+    if (id) wrap.dataset.id = id;
 
     if (from !== 'me' && avatarSrc) {
         const av = document.createElement('img');
@@ -182,6 +177,7 @@ async function loadMessages(uid, avatarSrc) {
         data.forEach(msg => {
             const from = (msg.from_user === currentUserID) ? 'me' : 'them';
             chatBox.appendChild(buildMessage({
+                id: msg.id,
                 from,
                 text: msg.text,
                 ts: new Date(msg.timestamp).getTime(),
@@ -199,7 +195,7 @@ async function loadMessages(uid, avatarSrc) {
 function openChat(card) {
     if (!card) return;
 
-    dialogs.forEach(d => d.classList.remove('active'));
+    document.querySelectorAll('.dialog-item').forEach(d => d.classList.remove('active'));
     card.classList.add('active');
 
     const uid = card.dataset.user;
@@ -221,7 +217,7 @@ function openChat(card) {
 
 /* Закрыть диалог */
 closeBtn.onclick = () => {
-    dialogs.forEach(d => d.classList.remove('active'));
+    document.querySelectorAll('.dialog-item').forEach(d => d.classList.remove('active'));
     headerLbl.textContent = 'Сообщения';
     avatarHdr.style.display = closeBtn.style.display = 'none';
     chatBox.innerHTML =
@@ -251,6 +247,7 @@ async function sendMessage() {
         if (!card) return;
 
         chatBox.appendChild(buildMessage({
+            id: msg.id,
             from: 'me',
             text: msg.text,
             ts: new Date(msg.timestamp).getTime()
@@ -274,10 +271,34 @@ function refreshCard(uid, text, timestamp) {
   parent.prepend(card);
 }
 
+async function updateOnline() {
+  try {
+    const res = await fetch('http://127.0.0.1:8000/online');
+    if (!res.ok) return;
+    const ids = await res.json();
+    document.querySelectorAll('.dialog-item').forEach(c => {
+      c.classList.toggle('online', ids.includes(parseInt(c.dataset.user)));
+    });
+  } catch {}
+}
+
 /* ------------------- события ------------------------------------- */
-dialogs.forEach(card => card.addEventListener('click', () => openChat(card)));
+document.querySelectorAll('.dialog-item').forEach(card =>
+    card.addEventListener('click', () => openChat(card)));
 sendBtn.onclick = sendMessage;
 inputBox.addEventListener('keyup', e => e.key === 'Enter' && sendMessage());
+chatBox.addEventListener('dblclick', async e => {
+  const wrap = e.target.closest('.msg-wrap.out');
+  if (!wrap) return;
+  const id = wrap.dataset.id;
+  if (!id) return;
+  if (!confirm('Удалить сообщение?')) return;
+  await fetch(`http://127.0.0.1:8000/messages/${id}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': 'Bearer ' + authToken }
+  });
+  wrap.remove();
+});
 
 async function loadDialogs() {
   const res = await fetch("http://127.0.0.1:8000/dialogs", {
@@ -285,10 +306,10 @@ async function loadDialogs() {
   });
   if (!res.ok) return;
 
-  const dialogs = await res.json();
+  const items = await res.json();
   const list = document.querySelector("#dialogs");
 
-  dialogs.forEach(user => {
+  items.forEach(user => {
     const item = document.createElement("div");
     item.classList.add("dialog-item");
     item.dataset.user = user.id;
@@ -310,3 +331,6 @@ async function loadDialogs() {
 function truncate(text, max) {
   return text.length > max ? text.slice(0, max) + "…" : text;
 }
+
+setInterval(updateOnline, 10000);
+updateOnline();
